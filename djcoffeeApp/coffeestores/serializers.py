@@ -6,7 +6,7 @@ from coffeestores import models
 class CoffeeDrinkerSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.CoffeeDrinker
-        fields = ['username', 'education']
+        fields = ['id', 'username', 'password']
 
 
 class DescriptorSeralizer(serializers.ModelSerializer):
@@ -18,16 +18,17 @@ class DescriptorSeralizer(serializers.ModelSerializer):
         fields = ['id', 'name', 'description', 'color', 'parent']
 
 
-class CoffeeShopSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = models.CoffeeShop
-        fields = ['name', 'address']
-
-
 class CoffeeDrinkSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.CoffeeDrink
-        fields = ['name', 'price', 'shop__name', 'volume']
+        fields = ['id', 'name', 'price', 'shop', 'volume']
+
+
+class CoffeeShopSerializer(serializers.ModelSerializer):
+    drinks = CoffeeDrinkSerializer(default=None)
+    class Meta:
+        model = models.CoffeeShop
+        fields = ['id', 'name', 'address', 'drinks']
 
 
 class ReviewSerializer(serializers.ModelSerializer):
@@ -35,5 +36,9 @@ class ReviewSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = models.Review
-        fields = ['author', 'notes', 'descriptors', 'overall_rating']
+        fields = ['id', 'author', 'notes', 'descriptors', 'overall_rating']
 
+
+class TokenSerializer(serializers.Serializer):
+    refresh = serializers.CharField(max_length=255)
+    access = serializers.CharField(max_length=255)
