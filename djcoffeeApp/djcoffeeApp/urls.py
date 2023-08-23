@@ -29,7 +29,7 @@ router = DefaultRouter()
 # router.register(r'drinker', views.CoffeeDrinkerViewSet, basename='drinker')
 router.register(r'desciptors', views.DescriptorViewSet, basename='descriptor')
 # router.register(r'shops', views.CoffeeShopViewSet, basename='shop')
-router.register(r'drinks', views.CoffeeDrinkViewSet, basename='drink')
+# router.register(r'drinks', views.CoffeeDrinkViewSet, basename='drink')
 router.register(r'reviews', views.ReviewViewSet, basename='review')
 router.register(r'drinker', views.AuthViewSet, basename='auth')
 
@@ -52,11 +52,19 @@ urlpatterns = [
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
 
     path('', include(router.urls)),
-    path('shops/', views.CoffeeShopViewSet.as_view(actions={'get': 'list'}), 
+    path('shops/', views.CoffeeShopViewSet.as_view(actions={'get': 'list', 
+                                                            'post': 'create',
+                                                            'put': 'update'}), 
          name='shops'),
     path('auth/register', views.AuthViewSet.as_view(actions={'post': 'register'}), 
          name='auth-register'),
     path('auth/login', views.AuthViewSet.as_view(actions={'post': 'login'}), 
          name='auth-login'),
+    path('auth/refresh', views.AuthViewSet.as_view(actions={'post': 'refresh'}), 
+         name='auth-refresh'),
+    path('drink/', views.CoffeeDrinkViewSet.as_view(actions={'get': 'get',
+                                                             'post': 'create',
+                                                             'put': 'update'}),
+         name='drink'),
     path('admin/', admin.site.urls),
 ]

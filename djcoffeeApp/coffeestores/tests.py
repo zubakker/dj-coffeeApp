@@ -1,5 +1,6 @@
 from rest_framework.test import APITestCase
 from django.urls import reverse
+from django.contrib.auth.models import Group
 
 from coffeestores import models, serializers
 
@@ -27,6 +28,19 @@ class CoffeeShopViewSetTestCase(APITestCase):
         drink_two.shop = shop_one
         drink_two.save()
 
+    def register_shopowner(self):
+        owner_group = Group(name='shop owner')
+        owner_group.save()
+        url = reverse('auth-register')
+        data = {'username': 'test',
+                 'password': 'test'}
+        response = self.client.post(url, data, format='json')
+        self.access = response.data['access']
+        self.refresh = response.data['refresh']
+        shop_owner = models.CoffeeDrinker.objects.get(username='test')
+        shop_owner.save()
+        shop_owner.groups.add(owner_group)
+        shop_owner.save()
 
     def test_coffeeshop_list(self):
         url = reverse('shops')
@@ -121,13 +135,233 @@ class CoffeeShopViewSetTestCase(APITestCase):
         self.assertEqual(drinks[0]['price'], '99.99')
         self.assertEqual(drinks[0]['volume'], 300)
 
+    def test_coffeeshop_create(self):
+        url = reverse('shops')
+
+        self.register_shopowner()
+
+        # Not authorized
+        response = self.client.post(url, format='json')
+        self.assertEqual(response.status_code, 401)
+
+        # Wrong token
+        headers = {'Authorization': 'Bearer test'}
+        response = self.client.post(url, headers=headers, format='json')
+        self.assertEqual(response.status_code, 401)
+        # No query
+        headers = {'Authorization': 'Bearer ' + self.access}
+        response = self.client.post(url, headers=headers, format='json')
+        self.assertEqual(response.status_code, 400)
+        # Invalid query
+        headers = {'Authorization': 'Bearer ' + self.access}
+        query = {'test': 'test'}
+        response = self.client.post(url, query, headers=headers, format='json')
+        self.assertEqual(response.status_code, 400)
+        # Successful request
+        query = {'name': 'test',
+                 'address': 'test1'}
+        headers = {'Authorization': 'Bearer ' + self.access}
+        response = self.client.post(url, query, headers=headers, format='json')
+        self.assertEqual(response.status_code, 201)
+        data = response.data
+        assert 'id' in list(data)
+        assert 'name' in list(data)
+        assert 'address' in list(data)
+        self.assertEqual(data['name'], 'test')
+        self.assertEqual(data['address'], 'test1')
+
+    def test_coffeeshop_update(self):
+        url = reverse('shops')
+
+        self.register_shopowner()
+
+        # Not authorized
+        response = self.client.put(url, format='json')
+        self.assertEqual(response.status_code, 401)
+
+        # Wrong token
+        headers = {'Authorization': 'Bearer test'}
+        response = self.client.put(url, headers=headers, format='json')
+        self.assertEqual(response.status_code, 401)
+        # No query
+        headers = {'Authorization': 'Bearer ' + self.access}
+        response = self.client.put(url, headers=headers, format='json')
+        self.assertEqual(response.status_code, 400)
+        # Invalid query
+        headers = {'Authorization': 'Bearer ' + self.access}
+        query = {'test': 'test'}
+        response = self.client.put(url, query, headers=headers, format='json')
+        self.assertEqual(response.status_code, 400)
+        # Invalid id
+        headers = {'Authorization': 'Bearer ' + self.access}
+        query = {'id': 111}
+        response = self.client.put(url, query, headers=headers, format='json')
+        self.assertEqual(response.status_code, 404)
+        # Invalid id type
+        headers = {'Authorization': 'Bearer ' + self.access}
+        query = {'id': 'test'}
+        response = self.client.put(url, query, headers=headers, format='json')
+        self.assertEqual(response.status_code, 400)
+        # Successful request
+        headers = {'Authorization': 'Bearer ' + self.access}
+        query = {'id': 1,
+                 'name': 'test11',
+                 'address': 'test111'}
+        response = self.client.put(url, query, headers=headers, format='json')
+        self.assertEqual(response.status_code, 200)
+        data = response.data
+        assert 'id' in list(data)
+        assert 'name' in list(data)
+        assert 'address' in list(data)
+        self.assertEqual(data['name'], 'test11')
+        self.assertEqual(data['address'], 'test111')
+
+
+class CoffeeDrinkViewSetTestCase(APITestCase):
+    def setUp(self):
+        shop_one = models.CoffeeShop(name='test1',
+                                     address='test_addr1')
+        shop_one.save()
+        drink_one = models.CoffeeDrink(name='test1',
+                                       price='99.99',
+                                       volume=300)
+        drink_one.shop = shop_one
+        drink_one.save()
+        
+    def register_shopowner(self):
+        owner_group = Group(name='shop owner')
+        owner_group.save()
+        url = reverse('auth-register')
+        data = {'username': 'test',
+                 'password': 'test'}
+        response = self.client.post(url, data, format='json')
+        self.access = response.data['access']
+        self.refresh = response.data['refresh']
+        shop_owner = models.CoffeeDrinker.objects.get(username='test')
+        shop_owner.save()
+        shop_owner.groups.add(owner_group)
+        shop_owner.save()
+
+    def test_coffeedrink_get(self):
+        url = reverse('drink')
+
+        # Id not a number
+        query = {'id': 'test'}
+        response = self.client.get(url, query, format='json')
+        self.assertEqual(response.status_code, 400)
+
+        # Invalid shop id
+        query = {'id': 1111}
+        response = self.client.get(url, query, format='json')
+        self.assertEqual(response.status_code, 404)
+
+        # Successful request
+        query = {'id': 1}
+        response = self.client.get(url, query, format='json')
+        self.assertEqual(response.status_code, 200)
+        data = response.data
+        assert 'name' in list(data)
+        assert 'price' in list(data)
+        assert 'volume' in list(data)
+        self.assertEqual(data['name'], 'test1')
+        self.assertEqual(data['price'], '99.99')
+        self.assertEqual(data['volume'], 300)
+
+    def test_coffeedrink_create(self):
+        url = reverse('drink')
+
+        self.register_shopowner()
+
+        # Not authorized
+        response = self.client.post(url, format='json')
+        self.assertEqual(response.status_code, 401)
+
+        # Wrong token
+        headers = {'Authorization': 'Bearer test'}
+        response = self.client.post(url, headers=headers, format='json')
+        self.assertEqual(response.status_code, 401)
+        # No query
+        headers = {'Authorization': 'Bearer ' + self.access}
+        response = self.client.post(url, headers=headers, format='json')
+        self.assertEqual(response.status_code, 400)
+        # Invalid query
+        headers = {'Authorization': 'Bearer ' + self.access}
+        query = {'test': 'test'}
+        response = self.client.post(url, query, headers=headers, format='json')
+        self.assertEqual(response.status_code, 400)
+        # Successful request
+        query = {'shop': 1,
+                 'name': 'test',
+                 'price': '0.00',
+                 'volume': 100}
+        headers = {'Authorization': 'Bearer ' + self.access}
+        response = self.client.post(url, query, headers=headers, format='json')
+        self.assertEqual(response.status_code, 201)
+        data = response.data
+        assert 'id' in list(data)
+        assert 'name' in list(data)
+        assert 'price' in list(data)
+        assert 'volume' in list(data)
+        self.assertEqual(data['name'], 'test')
+        self.assertEqual(data['price'], '0.00')
+        self.assertEqual(data['volume'], 100)
+
+    def test_coffeedrink_update(self):
+        url = reverse('drink')
+
+        self.register_shopowner()
+
+        # Not authorized
+        response = self.client.put(url, format='json')
+        self.assertEqual(response.status_code, 401)
+
+        # Wrong token
+        headers = {'Authorization': 'Bearer test'}
+        response = self.client.put(url, headers=headers, format='json')
+        self.assertEqual(response.status_code, 401)
+        # No query
+        headers = {'Authorization': 'Bearer ' + self.access}
+        response = self.client.put(url, headers=headers, format='json')
+        self.assertEqual(response.status_code, 400)
+        # Invalid query
+        headers = {'Authorization': 'Bearer ' + self.access}
+        query = {'test': 'test'}
+        response = self.client.put(url, query, headers=headers, format='json')
+        self.assertEqual(response.status_code, 400)
+        # Invalid id
+        headers = {'Authorization': 'Bearer ' + self.access}
+        query = {'id': 111}
+        response = self.client.put(url, query, headers=headers, format='json')
+        self.assertEqual(response.status_code, 404)
+        # Invalid id type
+        headers = {'Authorization': 'Bearer ' + self.access}
+        query = {'id': 'test'}
+        response = self.client.put(url, query, headers=headers, format='json')
+        self.assertEqual(response.status_code, 400)
+        # Successful request
+        headers = {'Authorization': 'Bearer ' + self.access}
+        query = {'id': 1,
+                 'name': 'test11'}
+        response = self.client.put(url, query, headers=headers, format='json')
+        self.assertEqual(response.status_code, 200)
+        data = response.data
+        assert 'id' in list(data)
+        assert 'name' in list(data)
+        assert 'price' in list(data)
+        assert 'volume' in list(data)
+        self.assertEqual(data['name'], 'test11')
+        self.assertEqual(data['price'], '99.99')
+        self.assertEqual(data['volume'], 300)
+
         
 class AuthViewSetTestCase(APITestCase):
     def register(self):
         url = reverse('auth-register')
-        query = {'username': 'test',
+        data = {'username': 'test',
                  'password': 'test'}
-        response = self.client.post(url, query, format='json')
+        response = self.client.post(url, data, format='json')
+        self.access = response.data['access']
+        self.refresh = response.data['refresh']
 
     def test_register(self):
         url = reverse('auth-register')
@@ -136,56 +370,75 @@ class AuthViewSetTestCase(APITestCase):
         response = self.client.post(url, format='json')
         self.assertEqual(response.status_code, 400)
         # No username
-        query = {'password': 'test'}
-        response = self.client.post(url, query, format='json')
+        data = {'password': 'test'}
+        response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, 400)
         # No password
-        query = {'username': 'test'}
-        response = self.client.post(url, query, format='json')
+        data = {'username': 'test'}
+        response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, 400)
         # Successful request
-        query = {'username': 'test',
+        data = {'username': 'test',
                  'password': 'test'}
-        response = self.client.post(url, query, format='json')
+        response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, 201)
         assert 'refresh' in list(response.data)
         assert 'access' in list(response.data)
 
         # User already exists
-        query = {'username': 'test',
+        data = {'username': 'test',
                  'password': 'test'}
-        response = self.client.post(url, query, format='json')
+        response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, 400)
 
     def test_login(self):
         self.register()
         url = reverse('auth-login')
 
-        # No query provided
+        # No data provided
         response = self.client.post(url, format='json')
         self.assertEqual(response.status_code, 400)
         # No password provided
-        query = {'username': 'test'}
-        response = self.client.post(url, query, format='json')
+        data = {'username': 'test'}
+        response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, 400)
         # User doesn't exist
-        query = {'username': 'test1',
+        data = {'username': 'test1',
                  'password': 'test1'}
-        response = self.client.post(url, query, format='json')
+        response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, 404)
         # Wrong password
-        query = {'username': 'test',
+        data = {'username': 'test',
                  'password': 'test1'}
-        response = self.client.post(url, query, format='json')
+        response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, 401)
 
         # Successful login
-        query = {'username': 'test',
+        data = {'username': 'test',
                  'password': 'test'}
-        response = self.client.post(url, query, format='json')
+        response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, 200)
         assert 'refresh' in list(response.data)
         assert 'access' in list(response.data)
+
+    def test_refresh(self):
+        self.register()
+        url = reverse('auth-refresh')
+
+        # Invlid token
+        data = {'refresh': 'test'}
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, 400)
+
+        # Valid token
+        data = {'refresh': self.refresh}
+        response = self.client.post(url, data, format='json')
+        self.assertEqual(response.status_code, 200)
+        assert 'refresh' in list(response.data)
+        assert 'access' in list(response.data)
+
+
+
 
 
 
