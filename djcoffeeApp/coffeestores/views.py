@@ -177,11 +177,102 @@ class CoffeeDrinkViewSet(viewsets.ModelViewSet):
             return Response('Unauthorized or dont have the permission', status=401)
         if 'id' not in list(request.data) or not str(request.data['id']).isdigit():
             return Response('No shop id provided', status=400)
+        
         shop = get_object_or_404(self.queryset, id=request.data['id'])
         serializer = self.serializer_class()
         shop = serializer.update(shop, request.data)
 
         data = self.serializer_class(shop).data
+        return Response(data, status=200)
+
+    @swagger_auto_schema(responses={200: serializers.CoffeeDrinkSerializer,
+                                    400: 'Invalid drink id',
+                                    401: 'Unauthorized or dont have the permission',
+                                    404: 'Drink not found'},
+                         operation_description='Upload image with a key "photo"')
+    def upload(self, request):
+        user = request.user
+        if user.is_anonymous or not user.groups.filter(name='shop owner').exists():
+            return Response('Unauthorized or dont have the permission', status=401)
+        if 'id' not in list(request.data) or not str(request.data['id']).isdigit():
+            return Response('No shop id provided', status=400)
+
+        shop = get_object_or_404(self.queryset, id=request.data['id'])
+        serializer = self.serializer_class()
+        photo = request.FILES.get('photo', None)
+
+        serializer = self.serializer_class()
+        shop = serializer.upload(shop, photo)
+        data = self.serializer_class(shop).data
+        return Response(data, status=200)
+
+
+class ReviewViewSet(viewsets.ModelViewSet):
+    queryset = models.Review.objects.all()
+    serializer_class = serializers.ReviewSerializer
+    paginator = paginators.CoffeeShopPaginator()
+
+    drink_id = openapi.Parameter('id', openapi.IN_QUERY, 
+                                 description="Id of a drink to get reviews for", 
+                                 type=openapi.TYPE_INTEGER)
+    @swagger_auto_schema(responses={200: serializers.ReviewSerializer,
+                                    400: 'Invalid drink id'},
+                         manual_parameters=[drink_id])
+    def list(self, request):
+        coffeedrink_id = request.GET.get('id')
+        if not coffeedrink_id:
+            return Response('No drink id provided', status=400)
+        if not coffeedrink_id.isdigit():
+            return Response('Drink id is not a number', status=400)
+        reviews = self.queryset.filter(id=coffeedrink_id)
+        drinks_data = self.serializer_class(reviews, many=True).data
+
+        result_page = self.paginator.paginate_queryset(reviews, request)
+        serializer = self.serializer_class(result_page, many=True,
+                                           context={'request': request})
+
+        return self.paginator.get_paginated_response(serializer.data)
+
+    @swagger_auto_schema(responses={200: serializers.ReviewSerializer,
+                                    400: 'Invalid review data or drink id',
+                                    401: 'Unauthorized',
+                                    404: 'Drink not found'},
+                         request_body=serializers.ReviewSerializer)
+    def create(self, request):
+        user = request.user
+        if user.is_anonymous:
+            return Response('Unauthorized', status=401)
+        if 'drink' not in list(request.data) or not str(request.data['drink']).isdigit():
+            return Response('No drink id provided', status=400)
+        drink = get_object_or_404(models.CoffeeDrink.objects.all(), 
+                                  id=request.data['drink'])
+        serializer = self.serializer_class(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
+        instance = serializer.save()
+        drinker = models.CoffeeDrinker.objects.get(id=user.id)
+        serializer.set_author(instance, drinker)
+        return Response(serializer.data, status=201)
+
+    @swagger_auto_schema(responses={200: serializers.ReviewSerializer,
+                                    400: 'Invalid review data or review id',
+                                    401: 'Unauthorized or not the review author',
+                                    404: 'Review not found'},
+                         request_body=serializers.ReviewPutSerializer)
+    def update(self, request):
+        user = request.user
+        if user.is_anonymous:
+            return Response('Unauthorized', status=401)
+        if 'id' not in list(request.data) or not str(request.data['id']).isdigit():
+            return Response('No review id provided', status=400)
+        review = get_object_or_404(self.queryset, id=request.data['id'])
+        if review.author.id != user.id:
+            return Response('Not the review author', status=401)
+
+        serializer = self.serializer_class()
+        review = serializer.update(review, request.data)
+
+        data = self.serializer_class(review).data
         return Response(data, status=200)
 
 
@@ -196,7 +287,4 @@ class DescriptorViewSet(viewsets.ModelViewSet):
     serializer_class = serializers.DescriptorSeralizer
 
 
-class ReviewViewSet(viewsets.ModelViewSet):
-    queryset = models.Review.objects.all()
-    serializer_class = serializers.ReviewSerializer
 

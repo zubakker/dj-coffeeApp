@@ -353,6 +353,170 @@ class CoffeeDrinkViewSetTestCase(APITestCase):
         self.assertEqual(data['price'], '99.99')
         self.assertEqual(data['volume'], 300)
 
+
+class ReviewViewSetTestCase(APITestCase):
+    def setUp(self):
+        shop_one = models.CoffeeShop(name='test1',
+                                     address='test_addr1')
+        shop_one.save()
+        drink_one = models.CoffeeDrink(name='test1',
+                                       price='99.99',
+                                       volume=300)
+        drink_one.shop = shop_one
+        drink_one.save()
+        review_one = models.Review(notes='test1',
+                                   descriptors=[1,2],
+                                   overall_rating=1.1)
+        review_one.drink = drink_one
+        review_one.save()
+        
+    def register(self):
+        url = reverse('auth-register')
+        data = {'username': 'test',
+                 'password': 'test'}
+        response = self.client.post(url, data, format='json')
+        self.access = response.data['access']
+        self.refresh = response.data['refresh']
+
+        review_one = models.Review.objects.get(id=1)
+        drinker = models.CoffeeDrinker.objects.get(id=1)
+        review_one.author = drinker
+        review_one.save()
+
+    def test_reviews_list(self):
+        url = reverse('reviews')
+
+        # Id not a number
+        query = {'id': 'test'}
+        response = self.client.get(url, query, format='json')
+        self.assertEqual(response.status_code, 400)
+
+        # Invalid shop id
+        query = {'id': 1111}
+        response = self.client.get(url, query, format='json')
+        self.assertEqual(response.status_code, 200)
+
+        # Successful request
+        query = {'id': 1}
+        response = self.client.get(url, query, format='json')
+        self.assertEqual(response.status_code, 200)
+        data = response.data
+        # Check Pagination
+        assert 'count' in list(data)
+        assert 'next' in list(data)
+        assert 'previous' in list(data)
+        assert 'results' in list(data)
+
+        self.assertEqual(data['count'], 1)
+        data = data['results'][0]
+        assert 'drink' in list(data)
+        assert 'id' in list(data)
+        assert 'notes' in list(data)
+        assert 'descriptors' in list(data)
+        assert 'overall_rating' in list(data)
+        self.assertEqual(data['drink'], 1)
+        self.assertEqual(data['notes'], 'test1')
+        self.assertEqual(data['descriptors'], [1,2])
+        self.assertEqual(data['overall_rating'], '1.1')
+
+    def test_reviews_create(self):
+        url = reverse('reviews')
+
+        self.register()
+
+        # Not authorized
+        response = self.client.post(url, format='json')
+        self.assertEqual(response.status_code, 401)
+
+        # Wrong token
+        headers = {'Authorization': 'Bearer test'}
+        response = self.client.post(url, headers=headers, format='json')
+        self.assertEqual(response.status_code, 401)
+        # No query
+        headers = {'Authorization': 'Bearer ' + self.access}
+        response = self.client.post(url, headers=headers, format='json')
+        self.assertEqual(response.status_code, 400)
+        # Invalid query
+        headers = {'Authorization': 'Bearer ' + self.access}
+        query = {'test': 'test'}
+        response = self.client.post(url, query, headers=headers, format='json')
+        self.assertEqual(response.status_code, 400)
+        # Successful request
+        query = {'notes': 'test2',
+                 'drink': 1,
+                 'descriptors': [1],
+                 'overall_rating': 2.2}
+        headers = {'Authorization': 'Bearer ' + self.access}
+        response = self.client.post(url, query, headers=headers, format='json')
+        self.assertEqual(response.status_code, 201)
+        data = response.data
+        assert 'drink' in list(data)
+        assert 'id' in list(data)
+        assert 'notes' in list(data)
+        assert 'descriptors' in list(data)
+        assert 'overall_rating' in list(data)
+        self.assertEqual(data['drink'], 1)
+        self.assertEqual(data['notes'], 'test2')
+        self.assertEqual(data['descriptors'], [1])
+        self.assertEqual(data['overall_rating'], '2.2')
+
+    def test_reviews_update(self):
+        url = reverse('reviews')
+
+        self.register()
+
+        # Not authorized
+        response = self.client.put(url, format='json')
+        self.assertEqual(response.status_code, 401)
+
+        # Wrong token
+        headers = {'Authorization': 'Bearer test'}
+        response = self.client.put(url, headers=headers, format='json')
+        self.assertEqual(response.status_code, 401)
+        # No query
+        headers = {'Authorization': 'Bearer ' + self.access}
+        response = self.client.put(url, headers=headers, format='json')
+        self.assertEqual(response.status_code, 400)
+        # Invalid query
+        headers = {'Authorization': 'Bearer ' + self.access}
+        query = {'test': 'test'}
+        response = self.client.put(url, query, headers=headers, format='json')
+        self.assertEqual(response.status_code, 400)
+        # Invalid id
+        headers = {'Authorization': 'Bearer ' + self.access}
+        query = {'id': 111}
+        response = self.client.put(url, query, headers=headers, format='json')
+        self.assertEqual(response.status_code, 404)
+        # Invalid id type
+        headers = {'Authorization': 'Bearer ' + self.access}
+        query = {'id': 'test'}
+        response = self.client.put(url, query, headers=headers, format='json')
+        self.assertEqual(response.status_code, 400)
+        # Successful request
+        headers = {'Authorization': 'Bearer ' + self.access}
+        query = {'id': 1,
+                 'notes': 'test2',
+                 'drink': 1,
+                 'descriptors': [1],
+                 'overall_rating': 2.2}
+        response = self.client.put(url, query, headers=headers, format='json')
+        self.assertEqual(response.status_code, 200)
+        data = response.data
+        assert 'drink' in list(data)
+        assert 'id' in list(data)
+        assert 'notes' in list(data)
+        assert 'descriptors' in list(data)
+        assert 'overall_rating' in list(data)
+        self.assertEqual(data['drink'], 1)
+        self.assertEqual(data['notes'], 'test2')
+        self.assertEqual(data['descriptors'], [1])
+        self.assertEqual(data['overall_rating'], '2.2')
+        # Check the changes
+        query = {'id': 1}
+        response = self.client.get(url, query, format='json')
+        data = response.data['results'][0]
+        self.assertEqual(data['notes'], 'test2')
+
         
 class AuthViewSetTestCase(APITestCase):
     def register(self):

@@ -30,7 +30,7 @@ router = DefaultRouter()
 router.register(r'desciptors', views.DescriptorViewSet, basename='descriptor')
 # router.register(r'shops', views.CoffeeShopViewSet, basename='shop')
 # router.register(r'drinks', views.CoffeeDrinkViewSet, basename='drink')
-router.register(r'reviews', views.ReviewViewSet, basename='review')
+# router.register(r'reviews', views.ReviewViewSet, basename='review')
 router.register(r'drinker', views.AuthViewSet, basename='auth')
 
 
@@ -66,5 +66,11 @@ urlpatterns = [
                                                              'post': 'create',
                                                              'put': 'update'}),
          name='drink'),
+    path('drink/upload', views.CoffeeDrinkViewSet.as_view(actions={'post': 'upload'}),
+         name='drink-upload'),
+    path('reviews/', views.ReviewViewSet.as_view(actions={'get': 'list',
+                                                          'post': 'create',
+                                                          'put': 'update'}),
+         name='reviews'),
     path('admin/', admin.site.urls),
 ]

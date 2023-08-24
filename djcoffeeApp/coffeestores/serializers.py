@@ -6,7 +6,7 @@ from coffeestores import models
 class CoffeeDrinkerSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.CoffeeDrinker
-        fields = ['id', 'username', 'password']
+        fields = ['id', 'username', 'password', 'photo']
 
 
 class DescriptorSeralizer(serializers.ModelSerializer):
@@ -19,9 +19,10 @@ class DescriptorSeralizer(serializers.ModelSerializer):
 
 
 class CoffeeDrinkSerializer(serializers.ModelSerializer):
+    photo = serializers.ImageField(required=False)
     class Meta:
         model = models.CoffeeDrink
-        fields = ['id', 'name', 'price', 'shop', 'volume']
+        fields = ['id', 'name', 'price', 'shop', 'volume', 'photo']
 
     def update(self, instance, data):
         if 'name' in list(data):
@@ -32,6 +33,17 @@ class CoffeeDrinkSerializer(serializers.ModelSerializer):
             instance.name = data['volume']
         instance.save()
         return instance
+
+    def upload(self, instance, file):
+        instance.photo = file
+        instance.save()
+        return instance
+
+class ImageSerializer(serializers.Serializer):
+    photo = serializers.ImageField()
+    class Meta:
+        model = models.CoffeeDrink
+        fields = ['photo']
 
 
 class CoffeeDrinkPutSerializer(serializers.Serializer):
@@ -74,11 +86,34 @@ class CoffeeShopPutSerializer(serializers.Serializer):
 
 
 class ReviewSerializer(serializers.ModelSerializer):
-    descriptors = DescriptorSeralizer()
+    # descriptors = Jso(required=False)
+    author = serializers.IntegerField(required=False, source='author.id')
 
     class Meta:
         model = models.Review
-        fields = ['id', 'author', 'notes', 'descriptors', 'overall_rating']
+        fields = ['drink', 'id', 'author', 'notes', 'descriptors', 'overall_rating']
+
+    def set_author(self, instance, user):
+        instance.author = user
+        instance.save()
+        return instance
+
+    def update(self, instance, data):
+        if 'notes' in list(data):
+            instance.notes = data['notes']
+        if 'descriptors' in list(data):
+            instance.descriptors = data['descriptors']
+        if 'overall_rating' in list(data):
+            instance.overall_rating = data['overall_rating']
+        instance.save()
+        return instance
+
+
+class ReviewPutSerializer(serializers.Serializer):
+    notes = serializers.CharField(required=False)
+    descriptors = serializers.JSONField(default=dict, required=False)
+    overall_rating = serializers.DecimalField(max_digits=2, 
+                                              decimal_places=1, required=False)
 
 
 class TokenSerializer(serializers.Serializer):
