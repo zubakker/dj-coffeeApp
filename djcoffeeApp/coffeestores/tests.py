@@ -602,9 +602,100 @@ class AuthViewSetTestCase(APITestCase):
         assert 'access' in list(response.data)
 
 
+class UsersMeViewSetTestCase(APITestCase):
+    def register(self):
+        url = reverse('auth-register')
+        data = {'username': 'test',
+                 'password': 'test'}
+        response = self.client.post(url, data, format='json')
+        self.access = response.data['access']
+        self.refresh = response.data['refresh']
+
+    def test_userme_get(self):
+        self.register()
+        url = reverse('users-me')
+
+        # Anonymous (No token provided)
+        response = self.client.get(url, format='json')
+        self.assertEqual(response.status_code, 401)
+
+        # Wrong token
+        headers = {'Authorization': 'Bearer test'}
+        response = self.client.get(url, headers=headers, format='json')
+        self.assertEqual(response.status_code, 401)
+
+        # Successful
+        headers = {'Authorization': 'Bearer ' + self.access}
+        response = self.client.get(url, headers=headers, format='json')
+        self.assertEqual(response.status_code, 200)
+
+        assert 'id' in list(response.data)
+        assert 'username' in list(response.data)
+        self.assertEqual(response.data['id'], 1)
+        self.assertEqual(response.data['username'], 'test')
 
 
+    def test_userme_update(self):
+        self.register()
+        url = reverse('users-me')
+
+        # Anonymous
+        response = self.client.put(url, format='json')
+        self.assertEqual(response.status_code, 401)
+        # Wrong token
+        headers = {'Authorization': 'Bearer test'}
+        response = self.client.put(url, headers=headers, format='json')
+        self.assertEqual(response.status_code, 401)
+
+        headers = {'Authorization': 'Bearer ' + self.access}
+
+        # No data provided
+        response = self.client.put(url, headers=headers, format='json')
+        self.assertEqual(response.status_code, 200)
+
+        # Firstname successful
+        data = {'first_name': 'test'}
+        response = self.client.put(url, data, headers=headers, format='json')
+        self.assertEqual(response.status_code, 200)
+        assert 'first_name' in list(response.data)
+        self.assertEqual(response.data['first_name'], 'test')
+
+        # Firstname too long
+        data = {'education': 'test'*100}
+        response = self.client.put(url, data, headers=headers, format='json')
+        self.assertEqual(response.status_code, 400)
+
+        # A few fields at once:
+        data = {'first_name': 'fn',
+                'last_name': 'ln',
+                'education': 'edu',
+                'email': 'e@ma.il'}
+        response = self.client.put(url, data, headers=headers, format='json')
+        self.assertEqual(response.status_code, 200)
+        assert 'first_name' in list(response.data)
+        assert 'last_name' in list(response.data)
+        assert 'education' in list(response.data)
+        assert 'email' in list(response.data)
+        self.assertEqual(response.data['first_name'], 'fn')
+        self.assertEqual(response.data['last_name'], 'ln')
+        self.assertEqual(response.data['education'], 'edu')
+        self.assertEqual(response.data['email'], 'e@ma.il')
 
 
+    def test_userme_delete(self):
+        self.register()
+        url = reverse('users-me')
 
+        # Invlid token
+        headers = {'Authorization': 'Bearer test'}
+        response = self.client.delete(url, headers=headers, format='json')
+        self.assertEqual(response.status_code, 401)
 
+        # Valid token
+        headers = {'Authorization': 'Bearer ' + self.access}
+        response = self.client.delete(url, headers=headers, format='json')
+        self.assertEqual(response.status_code, 200)
+
+        # Check user was deleted:
+        drinkers = models.CoffeeDrinker.objects.all()
+        self.assertEqual(len(drinkers), 0)

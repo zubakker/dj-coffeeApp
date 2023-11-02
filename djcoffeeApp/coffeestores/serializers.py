@@ -6,7 +6,30 @@ from coffeestores import models
 class CoffeeDrinkerSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.CoffeeDrinker
-        fields = ['id', 'username', 'password', 'photo']
+        fields = ['id', 'username', 'password', 
+                  'first_name', 'last_name', 'email', 'education', 'photo']
+
+    def update(self, instance, data):
+        if 'first_name' in list(data):
+            instance.first_name = data['first_name']
+        if 'last_name' in list(data):
+            instance.last_name = data['last_name']
+        if 'email' in list(data):
+            instance.email = data['email']
+        if 'education' in list(data):
+            instance.education = data['education']
+        instance.save()
+        return instance
+
+    def upload(self, instance, file):
+        instance.photo = file
+        instance.save()
+        return instance
+
+class CoffeeDrinkerPutSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.CoffeeDrinker
+        fields = ['id', 'first_name', 'last_name', 'email', 'education']
 
 
 class DescriptorSeralizer(serializers.ModelSerializer):
@@ -19,20 +42,22 @@ class DescriptorSeralizer(serializers.ModelSerializer):
 
 
 class CoffeeDrinkSerializer(serializers.ModelSerializer):
-    photo = serializers.ImageField(required=False)
+    # photo = serializers.ImageField(required=False, null=True)
     class Meta:
         model = models.CoffeeDrink
         fields = ['id', 'name', 'price', 'shop', 'volume', 'photo']
+        '''
 
     def update(self, instance, data):
         if 'name' in list(data):
             instance.name = data['name']
         if 'price' in list(data):
-            instance.name = data['price']
+            instance.price = data['price']
         if 'volume' in list(data):
-            instance.name = data['volume']
+            instance.volume = data['volume']
         instance.save()
         return instance
+    '''
 
     def upload(self, instance, file):
         instance.photo = file
@@ -40,7 +65,7 @@ class CoffeeDrinkSerializer(serializers.ModelSerializer):
         return instance
 
 class ImageSerializer(serializers.Serializer):
-    photo = serializers.ImageField()
+    photo = serializers.ImageField(required=True)
     class Meta:
         model = models.CoffeeDrink
         fields = ['photo']
@@ -68,6 +93,7 @@ class CoffeeShopSerializer(serializers.ModelSerializer):
         instance = self.Meta.model(name=name, address=address)
         instance.save()
         return instance
+    '''
     def update(self, instance, data):
         if 'name' in list(data):
             instance.name = data['name']
@@ -75,6 +101,7 @@ class CoffeeShopSerializer(serializers.ModelSerializer):
             instance.address = data['address']
         instance.save()
         return instance
+    '''
 
 class CoffeeShopPutSerializer(serializers.Serializer):
     id = serializers.IntegerField(required=True)
@@ -98,6 +125,7 @@ class ReviewSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
+    '''
     def update(self, instance, data):
         if 'notes' in list(data):
             instance.notes = data['notes']
@@ -107,6 +135,7 @@ class ReviewSerializer(serializers.ModelSerializer):
             instance.overall_rating = data['overall_rating']
         instance.save()
         return instance
+    '''
 
 
 class ReviewPutSerializer(serializers.Serializer):

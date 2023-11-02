@@ -3,8 +3,8 @@ from django.contrib.auth.models import User
 
 # Create your models here.
 class CoffeeDrinker(User):
-    education = models.CharField(max_length=63)
-    photo = models.ImageField(upload_to='files', null=True, blank=True)
+    education = models.CharField(max_length=63, null=True, blank=True)
+    photo = models.ImageField(upload_to='users', null=True, blank=True)
     ...
 
 class Descriptor(models.Model):

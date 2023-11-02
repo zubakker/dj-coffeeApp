@@ -5,6 +5,7 @@ from django.contrib.auth.hashers import check_password, make_password
 import rest_framework.filters
 from rest_framework import status, viewsets, permissions
 from rest_framework.response import Response
+from rest_framework.parsers import FormParser, MultiPartParser, JSONParser
 from rest_framework_simplejwt.tokens import RefreshToken, Token
 from rest_framework_simplejwt.exceptions import TokenError
 
@@ -21,6 +22,7 @@ from coffeestores import serializers, models, paginators, filters
 class CoffeeShopViewSet(viewsets.ModelViewSet):
     queryset = models.CoffeeShop.objects.all()
     serializer_class = serializers.CoffeeShopSerializer
+    put_serializer_class = serializers.CoffeeShopPutSerializer
     paginator = paginators.CoffeeShopPaginator()
     filter_backends = [DjangoFilterBackend, rest_framework.filters.OrderingFilter]
     filterset_class = filters.CoffeeShopFilterSet
@@ -79,11 +81,11 @@ class CoffeeShopViewSet(viewsets.ModelViewSet):
         if 'id' not in list(request.data) or not str(request.data['id']).isdigit():
             return Response('No shop id provided', status=400)
         shop = get_object_or_404(self.queryset, id=request.data['id'])
-        serializer = self.serializer_class()
-        shop = serializer.update(shop, request.data)
-
-        data = self.serializer_class(shop).data
-        return Response(data, status=200)
+        serializer = self.serializer_class(shop, data=request.data, partial=True) 
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
+        serializer.save()
+        return Response(serializer.data, status=200)
 
 
 class AuthViewSet(viewsets.ModelViewSet):
@@ -135,6 +137,8 @@ class AuthViewSet(viewsets.ModelViewSet):
 class CoffeeDrinkViewSet(viewsets.ModelViewSet):
     queryset = models.CoffeeDrink.objects.all()
     serializer_class = serializers.CoffeeDrinkSerializer
+    put_serializer_class = serializers.CoffeeDrinkPutSerializer
+    parser_classes = (FormParser, MultiPartParser, JSONParser)
 
     drink_id = openapi.Parameter('id', openapi.IN_QUERY, 
                                  description="Id of a drink to get details of", 
@@ -154,7 +158,8 @@ class CoffeeDrinkViewSet(viewsets.ModelViewSet):
 
     @swagger_auto_schema(responses={201: serializers.CoffeeDrinkerSerializer,
                                     400: 'Invalid drink data',
-                                    401: 'Unauthorized or dont have the permission'},
+                                    401: 'Unauthorized or dont have the permission',
+                                    415: 'Invalid parameters provided'},
                          request_body=serializers.CoffeeDrinkSerializer)
     def create(self, request):
         user = request.user
@@ -169,7 +174,8 @@ class CoffeeDrinkViewSet(viewsets.ModelViewSet):
     @swagger_auto_schema(responses={200: serializers.CoffeeDrinkSerializer,
                                     400: 'Invalid drink data or drink id',
                                     401: 'Unauthorized or dont have the permission',
-                                    404: 'Drink not found'},
+                                    404: 'Drink not found',
+                                    415: 'Invalid parameters provided'},
                          request_body=serializers.CoffeeDrinkPutSerializer)
     def update(self, request):
         user = request.user
@@ -178,18 +184,19 @@ class CoffeeDrinkViewSet(viewsets.ModelViewSet):
         if 'id' not in list(request.data) or not str(request.data['id']).isdigit():
             return Response('No shop id provided', status=400)
         
-        shop = get_object_or_404(self.queryset, id=request.data['id'])
-        serializer = self.serializer_class()
-        shop = serializer.update(shop, request.data)
-
-        data = self.serializer_class(shop).data
-        return Response(data, status=200)
+        drink = get_object_or_404(self.queryset, id=request.data['id'])
+        serializer = self.serializer_class(drink, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
+        serializer.save()
+        return Response(serializer.data, status=200)
 
     @swagger_auto_schema(responses={200: serializers.CoffeeDrinkSerializer,
                                     400: 'Invalid drink id',
                                     401: 'Unauthorized or dont have the permission',
                                     404: 'Drink not found'},
-                         operation_description='Upload image with a key "photo"')
+                         operation_description='Upload image with a key "photo"',
+                         request_body=serializers.ImageSerializer)
     def upload(self, request):
         user = request.user
         if user.is_anonymous or not user.groups.filter(name='shop owner').exists():
@@ -198,7 +205,6 @@ class CoffeeDrinkViewSet(viewsets.ModelViewSet):
             return Response('No shop id provided', status=400)
 
         shop = get_object_or_404(self.queryset, id=request.data['id'])
-        serializer = self.serializer_class()
         photo = request.FILES.get('photo', None)
 
         serializer = self.serializer_class()
@@ -210,14 +216,15 @@ class CoffeeDrinkViewSet(viewsets.ModelViewSet):
 class ReviewViewSet(viewsets.ModelViewSet):
     queryset = models.Review.objects.all()
     serializer_class = serializers.ReviewSerializer
+    put_serializer_class = serializers.ReviewSerializer
     paginator = paginators.CoffeeShopPaginator()
 
-    drink_id = openapi.Parameter('id', openapi.IN_QUERY, 
-                                 description="Id of a drink to get reviews for", 
+    review_id = openapi.Parameter('id', openapi.IN_QUERY, 
+                                 description="Id of a review to get details of", 
                                  type=openapi.TYPE_INTEGER)
     @swagger_auto_schema(responses={200: serializers.ReviewSerializer,
                                     400: 'Invalid drink id'},
-                         manual_parameters=[drink_id])
+                         manual_parameters=[review_id])
     def list(self, request):
         coffeedrink_id = request.GET.get('id')
         if not coffeedrink_id:
@@ -269,22 +276,67 @@ class ReviewViewSet(viewsets.ModelViewSet):
         if review.author.id != user.id:
             return Response('Not the review author', status=401)
 
-        serializer = self.serializer_class()
-        review = serializer.update(review, request.data)
+        serializer = self.serializer_class(review, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
+        serializer.save()
+        return Response(serializer.data, status=200)
 
-        data = self.serializer_class(review).data
-        return Response(data, status=200)
 
-
-# TEMP, just for testing
-class CoffeeDrinkerViewSet(viewsets.ModelViewSet):
+class UsersMeViewSet(viewsets.ModelViewSet):
     queryset = models.CoffeeDrinker.objects.all()
     serializer_class = serializers.CoffeeDrinkerSerializer
+    put_serializer_class = serializers.CoffeeDrinkerSerializer
+    parser_classes = (FormParser, MultiPartParser, JSONParser)
 
+    @swagger_auto_schema(responses={200: serializers.CoffeeDrinkerSerializer,
+                                    401: 'Unauthorized'})
+    def get(self, request):
+        user = request.user
+        if user.is_anonymous:
+            return Response('Unauthorized', status=401)
+        drinker = self.queryset.get(id=user.id)
+        serializer = self.serializer_class(drinker)
+        return Response(serializer.data)
 
-class DescriptorViewSet(viewsets.ModelViewSet):
-    queryset = models.Descriptor.objects.all()
-    serializer_class = serializers.DescriptorSeralizer
+    @swagger_auto_schema(responses={200: serializers.CoffeeDrinkerSerializer,
+                                    401: 'Unauthorized',
+                                    415: 'Invalid data provided'},
+                         request_body=serializers.CoffeeDrinkerPutSerializer)
+    def update(self, request):
+        user = request.user
+        if user.is_anonymous:
+            return Response('Unauthorized', status=401)
+        drinker = self.queryset.get(id=user.id)
+        serializer = self.serializer_class(request.user, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
+        serializer.save()
+        return Response(serializer.data, status=200)
 
+    @swagger_auto_schema(responses={200: 'Successfully deleted user',
+                                    401: 'Unauthorized'})
+    def delete(self, request):
+        user = request.user
+        if user.is_anonymous:
+            return Response('Unauthorized', status=401)
+        drinker = self.queryset.get(id=user.id)
+        drinker.delete()
+        return Response('Successfully deleted user', status=200)
 
+    @swagger_auto_schema(responses={200: serializers.CoffeeDrinkerSerializer,
+                                    401: 'Unauthorized'},
+                         request_body=serializers.ImageSerializer)
+    def upload(self, request):
+        user = request.user
+        if user.is_anonymous:
+            return Response('Unauthorized', status=401)
+        drinker = self.queryset.get(id=user.id)
+        serializer = self.serializer_class()
+        photo = request.FILES.get('photo', None)
+
+        drinker = serializer.upload(drinker, photo)
+        data = self.serializer_class(drinker).data
+        return Response(data, status=200)
+    
 
