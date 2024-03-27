@@ -1,12 +1,12 @@
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 
 from rest_framework import permissions
 
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 
-from coffeestores import views
+from coffeestores import views, consumers
 
 
 
@@ -54,4 +54,8 @@ urlpatterns = [
     path('users/me/upload', views.UsersMeViewSet.as_view(actions={'post': 'upload'}),
          name='users-me-upload'),
     path('admin/', admin.site.urls),
+]
+
+websocket_urlpatterns = [
+    re_path('send', consumers.MyConsumer.as_asgi()),
 ]
